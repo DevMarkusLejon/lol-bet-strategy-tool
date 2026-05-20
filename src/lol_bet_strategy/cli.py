@@ -5,7 +5,8 @@ from pathlib import Path
 
 from .db import connect, init_db, insert_odds, insert_signals, upsert_matches
 from .heuristics import find_value_signals
-from .importers import load_historical_matches
+from .importers import load_historical_matches, load_oracles_elixir_matches
+from .leaguepedia import LeaguepediaQuery, fetch_scoreboard_games
 from .odds_providers import MockOddsProvider
 
 
@@ -18,6 +19,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     import_history = subparsers.add_parser("import-history", help="Import historical matches from CSV")
     import_history.add_argument("csv_path", type=Path)
+
+    import_oe = subparsers.add_parser(
+        "import-oracles-elixir",
+        help="Import historical game results from an Oracle's Elixir CSV export",
+    )
+    import_oe.add_argument("csv_path", type=Path)
+
+    leaguepedia = subparsers.add_parser(
+        "fetch-leaguepedia-games",
+        help="Fetch completed historical games from Leaguepedia Cargo",
+    )
+    leaguepedia.add_argument(
+        "--start-date",
+        required=True,
+        help="Inclusive UTC date, for example 2024-01-01",
+    )
+    leaguepedia.add_argument(
+        "--end-date",
+        required=True,
+        help="Exclusive UTC date, for example 2024-02-01",
+    )
+    leaguepedia.add_argument("--league", help="Overview page filter, for example LCK or LEC")
+    leaguepedia.add_argument("--limit", type=int, default=500)
 
     collect = subparsers.add_parser("collect-odds", help="Collect latest odds from a provider")
     collect.add_argument("--provider", default="mock", choices=["mock"])
@@ -42,6 +66,25 @@ def main(argv: list[str] | None = None) -> int:
         match_count = upsert_matches(conn, matches)
         odds_count = insert_odds(conn, odds)
         print(f"imported {match_count} matches and {odds_count} odds snapshots")
+        return 0
+
+    if args.command == "import-oracles-elixir":
+        matches = load_oracles_elixir_matches(args.csv_path)
+        match_count = upsert_matches(conn, matches)
+        print(f"imported {match_count} Oracle's Elixir games")
+        return 0
+
+    if args.command == "fetch-leaguepedia-games":
+        matches = fetch_scoreboard_games(
+            LeaguepediaQuery(
+                start_date=args.start_date,
+                end_date=args.end_date,
+                league=args.league,
+                limit=args.limit,
+            )
+        )
+        match_count = upsert_matches(conn, matches)
+        print(f"fetched and imported {match_count} Leaguepedia games")
         return 0
 
     if args.command == "collect-odds":

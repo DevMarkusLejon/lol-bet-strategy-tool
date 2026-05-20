@@ -33,6 +33,18 @@ Import historical match results from CSV:
 lol-bets import-history data/historical_matches.csv
 ```
 
+Import Oracle's Elixir historical exports:
+
+```powershell
+lol-bets import-oracles-elixir path\to\oracles_elixir_export.csv
+```
+
+Fetch historical games from Leaguepedia Cargo:
+
+```powershell
+lol-bets fetch-leaguepedia-games --start-date 2024-01-01 --end-date 2024-02-01 --league LCK
+```
+
 Collect sample odds with the mock provider:
 
 ```powershell
@@ -65,6 +77,10 @@ Decimal odds are expected. Example:
 match_id,league,start_time,team_a,team_b,winner,best_of,closing_odds_a,closing_odds_b
 lck-2026-001,LCK,2026-01-14T10:00:00Z,T1,Gen.G,T1,3,1.85,1.95
 ```
+
+## Historical Data Sources
+
+See `docs/data-sources.md` for practical options. The best first source is Oracle's Elixir bulk exports. Leaguepedia Cargo is useful for targeted API queries by date range, tournament, or league page. Historical odds are a separate problem and will likely need a paid odds-history API or curated closing-line CSVs.
 
 ## Odds Providers
 
