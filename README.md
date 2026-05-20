@@ -57,6 +57,12 @@ Collect sample odds with the mock provider:
 lol-bets collect-odds --provider mock
 ```
 
+Automate repeated collection:
+
+```powershell
+lol-bets collect-loop --provider mock --interval-seconds 900
+```
+
 Record a real odds snapshot manually:
 
 ```powershell
@@ -109,6 +115,8 @@ See `docs/data-sources.md` for practical options. The best first source is Oracl
 See `docs/odds-history-options.md` for historical odds providers and rough cost expectations. Historical odds are a separate problem and will likely need a paid odds-history API, vendor sales conversation, or curated closing-line CSVs.
 
 See `docs/odds-recording.md` for building our own odds-history database from today onward.
+
+See `docs/automation.md` for local loop, Windows Task Scheduler, and GitHub Actions options.
 
 ## Odds Providers
 

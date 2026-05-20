@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -82,6 +83,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     collect = subparsers.add_parser("collect-odds", help="Collect latest odds from a provider")
     collect.add_argument("--provider", default="mock", choices=["mock"])
+
+    collect_loop = subparsers.add_parser("collect-loop", help="Collect odds repeatedly from a provider")
+    collect_loop.add_argument("--provider", default="mock", choices=["mock"])
+    collect_loop.add_argument("--interval-seconds", type=_positive_int_arg, default=900)
+    collect_loop.add_argument(
+        "--max-runs",
+        type=_positive_int_arg,
+        help="Stop after this many captures. Omit to run until interrupted.",
+    )
 
     run = subparsers.add_parser("run-heuristics", help="Run strategy heuristics over stored odds")
     run.add_argument("--min-edge", type=float, default=0.05)
@@ -186,11 +196,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "collect-odds":
-        provider = MockOddsProvider()
-        matches, odds = provider.fetch_upcoming()
-        match_count = upsert_matches(conn, matches)
-        odds_count = insert_odds(conn, odds)
-        print(f"collected {odds_count} odds snapshots for {match_count} matches from {provider.name}")
+        match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+        print(f"collected {odds_count} odds snapshots for {match_count} matches from {provider_name}")
+        return 0
+
+    if args.command == "collect-loop":
+        run_count = 0
+        while args.max_runs is None or run_count < args.max_runs:
+            run_count += 1
+            captured_at = datetime.now(UTC).isoformat()
+            match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+            print(
+                f"[{captured_at}] run={run_count} provider={provider_name} "
+                f"matches={match_count} odds_snapshots={odds_count}",
+                flush=True,
+            )
+            if args.max_runs is not None and run_count >= args.max_runs:
+                break
+            time.sleep(args.interval_seconds)
         return 0
 
     if args.command == "run-heuristics":
@@ -240,6 +263,27 @@ def _decimal_odds_arg(value: str) -> float:
     if odds <= 1:
         raise argparse.ArgumentTypeError("decimal odds must be greater than 1.0")
     return odds
+
+
+def _positive_int_arg(value: str) -> int:
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return number
+
+
+def _collect_provider_odds(conn, provider_name: str) -> tuple[int, int, str]:
+    provider = _provider_from_name(provider_name)
+    matches, odds = provider.fetch_upcoming()
+    match_count = upsert_matches(conn, matches)
+    odds_count = insert_odds(conn, odds)
+    return match_count, odds_count, provider.name
+
+
+def _provider_from_name(provider_name: str):
+    if provider_name == "mock":
+        return MockOddsProvider()
+    raise ValueError(f"Unknown provider: {provider_name}")
 
 
 if __name__ == "__main__":
