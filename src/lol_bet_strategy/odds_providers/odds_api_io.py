@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
@@ -33,19 +34,34 @@ class OddsApiIoProvider(OddsProvider):
         self.event_limit = event_limit
 
     def fetch_upcoming(self) -> tuple[list[Match], list[OddsSnapshot]]:
-        events = self._get_events()
+        events = [event for event in self._get_events() if event.get("status") == "pending"]
         matches: list[Match] = []
         snapshots: list[OddsSnapshot] = []
 
         for event in events:
             match = _event_to_match(event)
-            event_snapshots = self._get_event_odds(match, str(event["id"]))
+            try:
+                event_snapshots = self._get_event_odds(match, str(event["id"]))
+            except RuntimeError:
+                continue
             if not event_snapshots:
                 continue
             matches.append(match)
             snapshots.extend(event_snapshots)
 
         return matches, snapshots
+
+    def fetch_leagues(self) -> list[dict]:
+        payload = self._get_json(
+            "/leagues",
+            {
+                "apiKey": self.api_key,
+                "sport": "esports",
+            },
+        )
+        if not isinstance(payload, list):
+            raise RuntimeError("Unexpected Odds-API.io leagues response")
+        return payload
 
     def _get_events(self) -> list[dict]:
         params = {
@@ -62,27 +78,42 @@ class OddsApiIoProvider(OddsProvider):
         return payload
 
     def _get_event_odds(self, match: Match, event_id: str) -> list[OddsSnapshot]:
-        params = {
-            "apiKey": self.api_key,
-            "eventId": event_id,
-        }
-        if self.bookmakers:
-            params["bookmakers"] = ",".join(self.bookmakers)
+        if not self.bookmakers:
+            raise RuntimeError("ODDS_API_IO_BOOKMAKERS or --bookmakers is required")
 
-        payload = self._get_json("/odds", params)
-        return _odds_response_to_snapshots(match, payload)
+        snapshots: list[OddsSnapshot] = []
+        for bookmaker in self.bookmakers:
+            params = {
+                "apiKey": self.api_key,
+                "eventId": event_id,
+                "bookmakers": bookmaker,
+            }
+            try:
+                payload = self._get_json("/odds", params)
+            except RuntimeError:
+                continue
+            snapshots.extend(_odds_response_to_snapshots(match, payload))
+        return snapshots
 
     def _get_json(self, path: str, params: dict[str, str]) -> object:
         url = f"{BASE_URL}{path}?{urlencode(params)}"
         request = Request(url, headers={"User-Agent": "lol-bet-strategy-tool/0.1"})
-        try:
-            with urlopen(request, timeout=30) as response:
-                payload = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Odds-API.io HTTP {exc.code}: {detail}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"Odds-API.io request failed: {exc.reason}") from exc
+        for attempt in range(1, 4):
+            try:
+                with urlopen(request, timeout=30) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                break
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if exc.code in {429, 500, 502, 503, 504} and attempt < 3:
+                    time.sleep(attempt)
+                    continue
+                raise RuntimeError(f"Odds-API.io HTTP {exc.code}: {detail}") from exc
+            except URLError as exc:
+                if attempt < 3:
+                    time.sleep(attempt)
+                    continue
+                raise RuntimeError(f"Odds-API.io request failed: {exc.reason}") from exc
 
         if isinstance(payload, dict) and "error" in payload:
             raise RuntimeError(str(payload["error"]))

@@ -59,6 +59,8 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         create index if not exists idx_matches_teams on matches(team_a, team_b);
         create index if not exists idx_odds_match on odds_snapshots(match_id, captured_at);
+        create unique index if not exists idx_odds_unique_snapshot
+            on odds_snapshots(match_id, provider, bookmaker, captured_at, odds_a, odds_b);
         create index if not exists idx_signals_edge on heuristic_signals(edge);
         """
     )
@@ -90,9 +92,10 @@ def upsert_matches(conn: sqlite3.Connection, matches: Iterable[Match]) -> int:
 
 def insert_odds(conn: sqlite3.Connection, snapshots: Iterable[OddsSnapshot]) -> int:
     rows = list(snapshots)
+    before_count = conn.execute("select count(*) as count from odds_snapshots").fetchone()["count"]
     conn.executemany(
         """
-        insert into odds_snapshots (
+        insert or ignore into odds_snapshots (
             match_id, provider, bookmaker, captured_at, team_a, team_b, odds_a, odds_b
         )
         values (?, ?, ?, ?, ?, ?, ?, ?)
@@ -112,7 +115,8 @@ def insert_odds(conn: sqlite3.Connection, snapshots: Iterable[OddsSnapshot]) -> 
         ],
     )
     conn.commit()
-    return len(rows)
+    after_count = conn.execute("select count(*) as count from odds_snapshots").fetchone()["count"]
+    return after_count - before_count
 
 
 def get_match(conn: sqlite3.Connection, match_id: str) -> Match | None:

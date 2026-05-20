@@ -68,8 +68,9 @@ The first real provider is Odds-API.io:
 
 ```powershell
 $env:ODDS_API_IO_KEY="your-api-key"
-$env:ODDS_API_IO_BOOKMAKERS="Bet365,Unibet"
-lol-bets collect-odds --provider odds-api-io
+$env:ODDS_API_IO_BOOKMAKERS="Bet365"
+lol-bets provider-leagues --provider odds-api-io --contains "League of Legends"
+lol-bets collect-odds --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365
 ```
 
 Use `collect-loop` or Windows Task Scheduler to repeat that command over time.

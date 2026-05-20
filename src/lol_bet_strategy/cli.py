@@ -33,6 +33,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("db-summary", help="Print a short summary of imported data")
     subparsers.add_parser("latest-odds", help="Print latest odds per match and bookmaker")
 
+    provider_leagues = subparsers.add_parser(
+        "provider-leagues",
+        help="List provider leagues for configuring odds collection",
+    )
+    provider_leagues.add_argument("--provider", default="odds-api-io", choices=["odds-api-io"])
+    provider_leagues.add_argument("--contains", default="League of Legends")
+
     import_history = subparsers.add_parser("import-history", help="Import historical matches from CSV")
     import_history.add_argument("csv_path", type=Path)
 
@@ -85,9 +92,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     collect = subparsers.add_parser("collect-odds", help="Collect latest odds from a provider")
     collect.add_argument("--provider", default="mock", choices=PROVIDER_CHOICES)
+    collect.add_argument("--league", help="Provider league slug, for example league-of-legends-lck")
+    collect.add_argument("--bookmakers", help="Comma-separated bookmaker names, for example Bet365,Unibet")
+    collect.add_argument("--event-limit", type=_positive_int_arg, default=25)
 
     collect_loop = subparsers.add_parser("collect-loop", help="Collect odds repeatedly from a provider")
     collect_loop.add_argument("--provider", default="mock", choices=PROVIDER_CHOICES)
+    collect_loop.add_argument("--league", help="Provider league slug, for example league-of-legends-lck")
+    collect_loop.add_argument("--bookmakers", help="Comma-separated bookmaker names, for example Bet365,Unibet")
+    collect_loop.add_argument("--event-limit", type=_positive_int_arg, default=25)
     collect_loop.add_argument("--interval-seconds", type=_positive_int_arg, default=900)
     collect_loop.add_argument(
         "--max-runs",
@@ -129,6 +142,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"{row['team_b']}={row['odds_b']:.2f} captured={row['captured_at']}"
             )
         print(f"latest odds rows: {len(rows)}")
+        return 0
+
+    if args.command == "provider-leagues":
+        provider = _provider_from_name(args.provider)
+        leagues = provider.fetch_leagues()
+        needle = args.contains.lower() if args.contains else ""
+        for league in leagues:
+            name = league.get("name", "")
+            slug = league.get("slug", "")
+            if needle and needle not in name.lower() and needle not in slug.lower():
+                continue
+            print(f"{slug}: {name} ({league.get('eventsCount', 0)} events)")
         return 0
 
     if args.command == "import-history":
@@ -199,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "collect-odds":
         try:
-            match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+            match_count, odds_count, provider_name = _collect_provider_odds(conn, args)
         except RuntimeError as exc:
             raise SystemExit(str(exc)) from exc
         print(f"collected {odds_count} odds snapshots for {match_count} matches from {provider_name}")
@@ -211,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
             run_count += 1
             captured_at = datetime.now(UTC).isoformat()
             try:
-                match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+                match_count, odds_count, provider_name = _collect_provider_odds(conn, args)
             except RuntimeError as exc:
                 raise SystemExit(str(exc)) from exc
             print(
@@ -280,20 +305,36 @@ def _positive_int_arg(value: str) -> int:
     return number
 
 
-def _collect_provider_odds(conn, provider_name: str) -> tuple[int, int, str]:
-    provider = _provider_from_name(provider_name)
+def _collect_provider_odds(conn, args: argparse.Namespace) -> tuple[int, int, str]:
+    provider = _provider_from_name(
+        args.provider,
+        bookmakers=_split_cli_csv(getattr(args, "bookmakers", None)),
+        league=getattr(args, "league", None),
+        event_limit=getattr(args, "event_limit", 25),
+    )
     matches, odds = provider.fetch_upcoming()
     match_count = upsert_matches(conn, matches)
     odds_count = insert_odds(conn, odds)
     return match_count, odds_count, provider.name
 
 
-def _provider_from_name(provider_name: str):
+def _provider_from_name(
+    provider_name: str,
+    bookmakers: list[str] | None = None,
+    league: str | None = None,
+    event_limit: int = 25,
+):
     if provider_name == "mock":
         return MockOddsProvider()
     if provider_name == "odds-api-io":
-        return OddsApiIoProvider()
+        return OddsApiIoProvider(bookmakers=bookmakers, league=league, event_limit=event_limit)
     raise ValueError(f"Unknown provider: {provider_name}")
+
+
+def _split_cli_csv(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 if __name__ == "__main__":

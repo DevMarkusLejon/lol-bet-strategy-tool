@@ -13,8 +13,8 @@ Use this on a machine that stays on:
 
 ```powershell
 $env:ODDS_API_IO_KEY="your-api-key"
-$env:ODDS_API_IO_BOOKMAKERS="Bet365,Unibet"
-lol-bets collect-loop --provider odds-api-io --interval-seconds 900
+$env:ODDS_API_IO_BOOKMAKERS="Bet365"
+lol-bets collect-loop --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365 --interval-seconds 900
 ```
 
 That captures every 15 minutes until the process is stopped. Use `--max-runs` for testing:
@@ -30,7 +30,7 @@ Use Task Scheduler when you want the collector to run in the background without 
 Create a task that runs every 15 minutes with:
 
 ```powershell
-python -m lol_bet_strategy.cli --db C:\path\to\lol_bets.sqlite3 collect-odds --provider odds-api-io
+python -m lol_bet_strategy.cli --db C:\path\to\lol_bets.sqlite3 collect-odds --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365
 ```
 
 Set the task's working directory to the repository root. For this workspace, that is:
@@ -53,6 +53,20 @@ ODDS_API_IO_BOOKMAKERS
 ODDS_API_IO_LEAGUE
 ```
 
-Leave `ODDS_API_IO_LEAGUE` blank at first to discover all esports events. Set it later if the API account exposes a League of Legends league slug you want to narrow to.
+List available LoL leagues with:
+
+```powershell
+lol-bets provider-leagues --provider odds-api-io --contains "League of Legends"
+```
+
+Use a league slug such as `league-of-legends-lck`, `league-of-legends-lpl`, or `league-of-legends-lec`. Start with `Bet365`; the provider now queries bookmakers one at a time because some esports event calls fail when multiple bookmakers are requested together.
+
+The free key used during setup returned a 100 requests/hour limit. Keep `--event-limit` small and prefer one bookmaker at first:
+
+```powershell
+lol-bets collect-loop --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365 --event-limit 10 --interval-seconds 1800
+```
+
+That is roughly 11 requests per run: one event-list request plus one odds request per event.
 
 Do not scrape bookmaker websites unless their terms allow it. An API provider is cleaner because it gives stable event IDs, timestamps, bookmaker names, and price formats.

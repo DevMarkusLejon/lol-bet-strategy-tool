@@ -29,6 +29,7 @@ def test_odds_api_io_provider_fetches_events_and_moneyline_odds(monkeypatch) -> 
                 "home": "T1",
                 "away": "Gen.G",
                 "date": "2026-06-01T17:00:00Z",
+                "status": "pending",
             }
         ],
         {
@@ -67,6 +68,46 @@ def test_odds_api_io_provider_fetches_events_and_moneyline_odds(monkeypatch) -> 
     assert snapshots[0].bookmaker == "Bet365"
     assert snapshots[0].odds_a == 1.91
     assert snapshots[0].odds_b == 1.91
+
+
+def test_odds_api_io_provider_fetches_each_bookmaker_separately(monkeypatch) -> None:
+    requested_urls: list[str] = []
+    responses = [
+        [
+            {
+                "id": 123,
+                "league": {"name": "League of Legends Champions Korea", "slug": "lck"},
+                "home": "T1",
+                "away": "Gen.G",
+                "date": "2026-06-01T17:00:00Z",
+                "status": "pending",
+            }
+        ],
+        {
+            "bookmakers": {
+                "Bet365": [
+                    {
+                        "name": "ML",
+                        "odds": [{"home": "1.91", "away": "1.91"}],
+                    }
+                ]
+            }
+        },
+        {"bookmakers": {"Unibet": []}},
+    ]
+
+    def fake_urlopen(request, timeout):
+        requested_urls.append(request.full_url)
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr(odds_api_io, "urlopen", fake_urlopen)
+
+    provider = OddsApiIoProvider(api_key="test-key", bookmakers=["Bet365", "Unibet"])
+    _matches, snapshots = provider.fetch_upcoming()
+
+    assert len(snapshots) == 1
+    assert any("bookmakers=Bet365" in url for url in requested_urls)
+    assert any("bookmakers=Unibet" in url for url in requested_urls)
 
 
 def test_odds_api_io_provider_requires_api_key(monkeypatch) -> None:

@@ -61,14 +61,14 @@ Collect real esports odds with Odds-API.io:
 
 ```powershell
 $env:ODDS_API_IO_KEY="your-api-key"
-$env:ODDS_API_IO_BOOKMAKERS="Bet365,Unibet"
-lol-bets collect-odds --provider odds-api-io
+$env:ODDS_API_IO_BOOKMAKERS="Bet365"
+lol-bets collect-odds --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365
 ```
 
 Automate repeated collection:
 
 ```powershell
-lol-bets collect-loop --provider odds-api-io --interval-seconds 900
+lol-bets collect-loop --provider odds-api-io --league league-of-legends-lck --bookmakers Bet365 --interval-seconds 900
 ```
 
 Record a real odds snapshot manually:
