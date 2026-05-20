@@ -1,0 +1,4 @@
+match_id,league,start_time,team_a,team_b,winner,best_of,closing_odds_a,closing_odds_b
+lck-2026-001,LCK,2026-01-14T10:00:00Z,T1,Gen.G,T1,3,1.85,1.95
+lck-2026-002,LCK,2026-01-15T10:00:00Z,T1,DK,T1,3,1.70,2.10
+lck-2026-003,LCK,2026-01-16T10:00:00Z,Gen.G,DK,Gen.G,3,1.55,2.40

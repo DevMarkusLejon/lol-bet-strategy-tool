@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import os
+import sqlite3
+from collections.abc import Iterable
+from pathlib import Path
+
+from .models import HeuristicSignal, Match, OddsSnapshot
+
+DEFAULT_DB_PATH = Path(os.getenv("LOL_BETS_DB_PATH", "data/lol_bets.sqlite3"))
+
+
+def connect(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+    path = Path(db_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        create table if not exists matches (
+            match_id text primary key,
+            league text not null,
+            start_time text not null,
+            team_a text not null,
+            team_b text not null,
+            winner text,
+            best_of integer
+        );
+
+        create table if not exists odds_snapshots (
+            id integer primary key autoincrement,
+            match_id text not null,
+            provider text not null,
+            bookmaker text not null,
+            captured_at text not null,
+            team_a text not null,
+            team_b text not null,
+            odds_a real not null,
+            odds_b real not null,
+            foreign key (match_id) references matches(match_id)
+        );
+
+        create table if not exists heuristic_signals (
+            id integer primary key autoincrement,
+            match_id text not null,
+            team text not null,
+            heuristic text not null,
+            estimated_probability real not null,
+            market_probability real not null,
+            edge real not null,
+            recommendation text not null,
+            created_at text not null default current_timestamp,
+            foreign key (match_id) references matches(match_id)
+        );
+
+        create index if not exists idx_matches_teams on matches(team_a, team_b);
+        create index if not exists idx_odds_match on odds_snapshots(match_id, captured_at);
+        create index if not exists idx_signals_edge on heuristic_signals(edge);
+        """
+    )
+    conn.commit()
+
+
+def upsert_matches(conn: sqlite3.Connection, matches: Iterable[Match]) -> int:
+    rows = list(matches)
+    conn.executemany(
+        """
+        insert into matches (match_id, league, start_time, team_a, team_b, winner, best_of)
+        values (?, ?, ?, ?, ?, ?, ?)
+        on conflict(match_id) do update set
+            league = excluded.league,
+            start_time = excluded.start_time,
+            team_a = excluded.team_a,
+            team_b = excluded.team_b,
+            winner = excluded.winner,
+            best_of = excluded.best_of
+        """,
+        [
+            (m.match_id, m.league, m.start_time, m.team_a, m.team_b, m.winner, m.best_of)
+            for m in rows
+        ],
+    )
+    conn.commit()
+    return len(rows)
+
+
+def insert_odds(conn: sqlite3.Connection, snapshots: Iterable[OddsSnapshot]) -> int:
+    rows = list(snapshots)
+    conn.executemany(
+        """
+        insert into odds_snapshots (
+            match_id, provider, bookmaker, captured_at, team_a, team_b, odds_a, odds_b
+        )
+        values (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                s.match_id,
+                s.provider,
+                s.bookmaker,
+                s.captured_at,
+                s.team_a,
+                s.team_b,
+                s.odds_a,
+                s.odds_b,
+            )
+            for s in rows
+        ],
+    )
+    conn.commit()
+    return len(rows)
+
+
+def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal]) -> int:
+    rows = list(signals)
+    conn.executemany(
+        """
+        insert into heuristic_signals (
+            match_id, team, heuristic, estimated_probability, market_probability, edge,
+            recommendation
+        )
+        values (?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                s.match_id,
+                s.team,
+                s.heuristic,
+                s.estimated_probability,
+                s.market_probability,
+                s.edge,
+                s.recommendation,
+            )
+            for s in rows
+        ],
+    )
+    conn.commit()
+    return len(rows)
