@@ -45,6 +45,12 @@ Fetch historical games from Leaguepedia Cargo:
 lol-bets fetch-leaguepedia-games --start-date 2024-01-01 --end-date 2024-02-01 --league LCK
 ```
 
+Inspect the local database:
+
+```powershell
+lol-bets db-summary
+```
+
 Collect sample odds with the mock provider:
 
 ```powershell
@@ -80,7 +86,9 @@ lck-2026-001,LCK,2026-01-14T10:00:00Z,T1,Gen.G,T1,3,1.85,1.95
 
 ## Historical Data Sources
 
-See `docs/data-sources.md` for practical options. The best first source is Oracle's Elixir bulk exports. Leaguepedia Cargo is useful for targeted API queries by date range, tournament, or league page. Historical odds are a separate problem and will likely need a paid odds-history API or curated closing-line CSVs.
+See `docs/data-sources.md` for practical options. The best first source is Oracle's Elixir bulk exports. Leaguepedia Cargo is useful for targeted API queries by date range, tournament, or league page.
+
+See `docs/odds-history-options.md` for historical odds providers and rough cost expectations. Historical odds are a separate problem and will likely need a paid odds-history API, vendor sales conversation, or curated closing-line CSVs.
 
 ## Odds Providers
 

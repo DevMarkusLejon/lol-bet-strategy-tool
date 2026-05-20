@@ -140,3 +140,24 @@ def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal])
     )
     conn.commit()
     return len(rows)
+
+
+def database_summary(conn: sqlite3.Connection) -> dict[str, object]:
+    total = conn.execute("select count(*) as count from matches").fetchone()["count"]
+    date_range = conn.execute(
+        "select min(start_time) as min_date, max(start_time) as max_date from matches"
+    ).fetchone()
+    leagues = conn.execute(
+        """
+        select league, count(*) as count
+        from matches
+        group by league
+        order by count desc, league asc
+        """
+    ).fetchall()
+    return {
+        "matches": total,
+        "min_date": date_range["min_date"],
+        "max_date": date_range["max_date"],
+        "leagues": [(row["league"], row["count"]) for row in leagues],
+    }

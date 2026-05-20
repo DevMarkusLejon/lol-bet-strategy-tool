@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .db import connect, init_db, insert_odds, insert_signals, upsert_matches
+from .db import connect, database_summary, init_db, insert_odds, insert_signals, upsert_matches
 from .heuristics import find_value_signals
 from .importers import load_historical_matches, load_oracles_elixir_matches
 from .leaguepedia import LeaguepediaQuery, fetch_scoreboard_games
@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("init-db", help="Create or migrate the SQLite database")
+    subparsers.add_parser("db-summary", help="Print a short summary of imported data")
 
     import_history = subparsers.add_parser("import-history", help="Import historical matches from CSV")
     import_history.add_argument("csv_path", type=Path)
@@ -59,6 +60,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "init-db":
         print(f"initialized {args.db}")
+        return 0
+
+    if args.command == "db-summary":
+        summary = database_summary(conn)
+        print(f"matches: {summary['matches']}")
+        print(f"date range: {summary['min_date']} to {summary['max_date']}")
+        print("leagues:")
+        for league, count in summary["leagues"]:
+            print(f"  {league}: {count}")
         return 0
 
     if args.command == "import-history":
