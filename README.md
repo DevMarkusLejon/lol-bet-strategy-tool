@@ -57,10 +57,18 @@ Collect sample odds with the mock provider:
 lol-bets collect-odds --provider mock
 ```
 
+Collect real esports odds with Odds-API.io:
+
+```powershell
+$env:ODDS_API_IO_KEY="your-api-key"
+$env:ODDS_API_IO_BOOKMAKERS="Bet365,Unibet"
+lol-bets collect-odds --provider odds-api-io
+```
+
 Automate repeated collection:
 
 ```powershell
-lol-bets collect-loop --provider mock --interval-seconds 900
+lol-bets collect-loop --provider odds-api-io --interval-seconds 900
 ```
 
 Record a real odds snapshot manually:
@@ -124,7 +132,7 @@ The core app expects odds providers to return decimal prices for upcoming matche
 
 Common options to integrate later:
 
-- The Odds API esports markets
+- Odds-API.io esports markets
 - PandaScore odds or fixture metadata
 - OddsJam, Sportradar, or bookmaker-specific feeds
 

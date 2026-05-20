@@ -19,7 +19,9 @@ from .heuristics import find_value_signals
 from .importers import load_historical_matches, load_odds_snapshots_csv, load_oracles_elixir_matches
 from .leaguepedia import LeaguepediaQuery, fetch_scoreboard_games
 from .models import Match, OddsSnapshot
-from .odds_providers import MockOddsProvider
+from .odds_providers import MockOddsProvider, OddsApiIoProvider
+
+PROVIDER_CHOICES = ["mock", "odds-api-io"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -82,10 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
     leaguepedia.add_argument("--limit", type=int, default=500)
 
     collect = subparsers.add_parser("collect-odds", help="Collect latest odds from a provider")
-    collect.add_argument("--provider", default="mock", choices=["mock"])
+    collect.add_argument("--provider", default="mock", choices=PROVIDER_CHOICES)
 
     collect_loop = subparsers.add_parser("collect-loop", help="Collect odds repeatedly from a provider")
-    collect_loop.add_argument("--provider", default="mock", choices=["mock"])
+    collect_loop.add_argument("--provider", default="mock", choices=PROVIDER_CHOICES)
     collect_loop.add_argument("--interval-seconds", type=_positive_int_arg, default=900)
     collect_loop.add_argument(
         "--max-runs",
@@ -196,7 +198,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "collect-odds":
-        match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+        try:
+            match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
         print(f"collected {odds_count} odds snapshots for {match_count} matches from {provider_name}")
         return 0
 
@@ -205,7 +210,10 @@ def main(argv: list[str] | None = None) -> int:
         while args.max_runs is None or run_count < args.max_runs:
             run_count += 1
             captured_at = datetime.now(UTC).isoformat()
-            match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+            try:
+                match_count, odds_count, provider_name = _collect_provider_odds(conn, args.provider)
+            except RuntimeError as exc:
+                raise SystemExit(str(exc)) from exc
             print(
                 f"[{captured_at}] run={run_count} provider={provider_name} "
                 f"matches={match_count} odds_snapshots={odds_count}",
@@ -283,6 +291,8 @@ def _collect_provider_odds(conn, provider_name: str) -> tuple[int, int, str]:
 def _provider_from_name(provider_name: str):
     if provider_name == "mock":
         return MockOddsProvider()
+    if provider_name == "odds-api-io":
+        return OddsApiIoProvider()
     raise ValueError(f"Unknown provider: {provider_name}")
 
 

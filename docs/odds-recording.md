@@ -61,3 +61,15 @@ For a useful self-built dataset, capture each upcoming match at consistent times
 - closing price right before the match starts
 
 Bookmaker names should be stable strings such as `pinnacle`, `bet365`, or `unibet`. Provider should describe how the row was collected, for example `manual`, `spreadsheet`, or a future API provider name.
+
+## Automated API Collection
+
+The first real provider is Odds-API.io:
+
+```powershell
+$env:ODDS_API_IO_KEY="your-api-key"
+$env:ODDS_API_IO_BOOKMAKERS="Bet365,Unibet"
+lol-bets collect-odds --provider odds-api-io
+```
+
+Use `collect-loop` or Windows Task Scheduler to repeat that command over time.
