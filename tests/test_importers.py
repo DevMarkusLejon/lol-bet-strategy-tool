@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lol_bet_strategy.importers import load_oracles_elixir_matches
+from lol_bet_strategy.importers import load_odds_snapshots_csv, load_oracles_elixir_matches
 
 
 def test_load_oracles_elixir_matches_reads_team_rows(tmp_path: Path) -> None:
@@ -48,3 +48,26 @@ def test_load_oracles_elixir_matches_reads_real_export_column_names(tmp_path: Pa
     assert matches[0].team_a == "Invictus Gaming"
     assert matches[0].team_b == "FunPlus Phoenix"
     assert matches[0].winner == "Invictus Gaming"
+
+
+def test_load_odds_snapshots_csv_reads_match_and_snapshot_rows(tmp_path: Path) -> None:
+    csv_path = tmp_path / "odds.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "match_id,league,start_time,team_a,team_b,best_of,provider,bookmaker,captured_at,odds_a,odds_b",
+                "lck-2026-001,LCK,2026-06-01T17:00:00Z,T1,Gen.G,3,manual,pinnacle,2026-05-20T12:00:00Z,1.91,1.91",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    matches, odds = load_odds_snapshots_csv(csv_path)
+
+    assert len(matches) == 1
+    assert matches[0].match_id == "lck-2026-001"
+    assert matches[0].best_of == 3
+    assert len(odds) == 1
+    assert odds[0].bookmaker == "pinnacle"
+    assert odds[0].odds_a == 1.91
+    assert odds[0].odds_b == 1.91

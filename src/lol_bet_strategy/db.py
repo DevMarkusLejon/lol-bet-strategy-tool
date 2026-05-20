@@ -115,6 +115,44 @@ def insert_odds(conn: sqlite3.Connection, snapshots: Iterable[OddsSnapshot]) -> 
     return len(rows)
 
 
+def get_match(conn: sqlite3.Connection, match_id: str) -> Match | None:
+    row = conn.execute(
+        """
+        select match_id, league, start_time, team_a, team_b, winner, best_of
+        from matches
+        where match_id = ?
+        """,
+        (match_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Match(
+        match_id=row["match_id"],
+        league=row["league"],
+        start_time=row["start_time"],
+        team_a=row["team_a"],
+        team_b=row["team_b"],
+        winner=row["winner"],
+        best_of=row["best_of"],
+    )
+
+
+def latest_odds_snapshots(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute(
+        """
+        select o.*, m.league, m.start_time
+        from odds_snapshots o
+        join matches m on m.match_id = o.match_id
+        where o.id in (
+            select max(id)
+            from odds_snapshots
+            group by match_id, bookmaker
+        )
+        order by m.start_time asc, o.bookmaker asc
+        """
+    ).fetchall()
+
+
 def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal]) -> int:
     rows = list(signals)
     conn.executemany(
@@ -144,6 +182,7 @@ def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal])
 
 def database_summary(conn: sqlite3.Connection) -> dict[str, object]:
     total = conn.execute("select count(*) as count from matches").fetchone()["count"]
+    odds_total = conn.execute("select count(*) as count from odds_snapshots").fetchone()["count"]
     date_range = conn.execute(
         "select min(start_time) as min_date, max(start_time) as max_date from matches"
     ).fetchone()
@@ -157,6 +196,7 @@ def database_summary(conn: sqlite3.Connection) -> dict[str, object]:
     ).fetchall()
     return {
         "matches": total,
+        "odds_snapshots": odds_total,
         "min_date": date_range["min_date"],
         "max_date": date_range["max_date"],
         "leagues": [(row["league"], row["count"]) for row in leagues],

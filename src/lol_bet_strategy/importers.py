@@ -2,12 +2,24 @@ from __future__ import annotations
 
 import csv
 from collections import defaultdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .models import Match, OddsSnapshot
 
 REQUIRED_HISTORY_COLUMNS = {"match_id", "league", "start_time", "team_a", "team_b", "winner", "best_of"}
 ORACLES_ELIXIR_REQUIRED_COLUMNS = {"gameid", "league", "date", "result"}
+REQUIRED_ODDS_COLUMNS = {
+    "match_id",
+    "league",
+    "start_time",
+    "team_a",
+    "team_b",
+    "provider",
+    "bookmaker",
+    "odds_a",
+    "odds_b",
+}
 
 
 def load_historical_matches(path: Path | str) -> tuple[list[Match], list[OddsSnapshot]]:
@@ -103,6 +115,44 @@ def load_oracles_elixir_matches(path: Path | str) -> list[Match]:
     return matches
 
 
+def load_odds_snapshots_csv(path: Path | str) -> tuple[list[Match], list[OddsSnapshot]]:
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise ValueError("CSV file has no header row")
+
+        missing = REQUIRED_ODDS_COLUMNS.difference(reader.fieldnames)
+        if missing:
+            raise ValueError(f"Odds CSV missing required columns: {', '.join(sorted(missing))}")
+
+        matches: list[Match] = []
+        odds: list[OddsSnapshot] = []
+        for row in reader:
+            match = Match(
+                match_id=row["match_id"],
+                league=row["league"],
+                start_time=row["start_time"],
+                team_a=row["team_a"],
+                team_b=row["team_b"],
+                winner=row.get("winner") or None,
+                best_of=int(row["best_of"]) if row.get("best_of") else None,
+            )
+            snapshot = OddsSnapshot(
+                match_id=match.match_id,
+                provider=row["provider"],
+                bookmaker=row["bookmaker"],
+                captured_at=row.get("captured_at") or _now_utc(),
+                team_a=match.team_a,
+                team_b=match.team_b,
+                odds_a=_parse_decimal_odds(row["odds_a"], "odds_a"),
+                odds_b=_parse_decimal_odds(row["odds_b"], "odds_b"),
+            )
+            matches.append(match)
+            odds.append(snapshot)
+
+        return matches, odds
+
+
 def _is_oracles_elixir_team_row(row: dict[str, str]) -> bool:
     position = row.get("position", "").lower()
     participant_id = row.get("participantid") or row.get("playerid", "")
@@ -136,3 +186,14 @@ def _normalize_utc_datetime(value: str) -> str:
     if clean.endswith("Z") or "+" in clean[10:] or clean[10:].count("-") > 0:
         return clean
     return f"{clean}Z"
+
+
+def _parse_decimal_odds(value: str, field_name: str) -> float:
+    odds = float(value)
+    if odds <= 1:
+        raise ValueError(f"{field_name} must be decimal odds greater than 1.0")
+    return odds
+
+
+def _now_utc() -> str:
+    return datetime.now(UTC).isoformat()

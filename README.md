@@ -57,6 +57,24 @@ Collect sample odds with the mock provider:
 lol-bets collect-odds --provider mock
 ```
 
+Record a real odds snapshot manually:
+
+```powershell
+lol-bets record-odds --match-id lck-2026-001 --league LCK --start-time 2026-06-01T17:00:00Z --team-a T1 --team-b Gen.G --bookmaker pinnacle --odds-a 1.91 --odds-b 1.91
+```
+
+Import odds snapshots from CSV:
+
+```powershell
+lol-bets import-odds-csv data/odds_snapshots.example.csv
+```
+
+Inspect latest captured odds:
+
+```powershell
+lol-bets latest-odds
+```
+
 Run heuristics:
 
 ```powershell
@@ -89,6 +107,8 @@ lck-2026-001,LCK,2026-01-14T10:00:00Z,T1,Gen.G,T1,3,1.85,1.95
 See `docs/data-sources.md` for practical options. The best first source is Oracle's Elixir bulk exports. Leaguepedia Cargo is useful for targeted API queries by date range, tournament, or league page.
 
 See `docs/odds-history-options.md` for historical odds providers and rough cost expectations. Historical odds are a separate problem and will likely need a paid odds-history API, vendor sales conversation, or curated closing-line CSVs.
+
+See `docs/odds-recording.md` for building our own odds-history database from today onward.
 
 ## Odds Providers
 
