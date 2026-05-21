@@ -176,8 +176,9 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows:
             best_of = f"bo{row['best_of']}" if row["best_of"] else "bo?"
             start_time = _format_match_time(row["start_time"])
+            league = _display_league(row["league"])
             base = (
-                f"{start_time} | {row['league']} | {best_of} | "
+                f"{start_time} | {league} | {best_of} | "
                 f"{row['team_a']} vs {row['team_b']} | {row['match_id']}"
             )
             if row["bookmaker"]:
@@ -415,6 +416,31 @@ def _format_match_time(value: str) -> str:
     utc_time = parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
     local_time = parsed.astimezone().strftime("%H:%M local")
     return f"{utc_time} ({local_time})"
+
+
+def _display_league(value: str) -> str:
+    normalized = value.lower()
+    known_leagues = [
+        "LCK CL",
+        "LCK",
+        "LPL",
+        "LEC",
+        "LCS",
+        "CBLOL",
+        "PCS",
+        "VCS",
+        "LJL",
+        "TCL",
+        "NACL",
+        "LFL",
+        "LCP",
+        "LPLOL",
+        "GLL",
+    ]
+    for league in known_leagues:
+        if league.lower() in normalized:
+            return league
+    return value
 
 
 if __name__ == "__main__":
