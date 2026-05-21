@@ -8,6 +8,7 @@ from pathlib import Path
 from .db import (
     connect,
     database_summary,
+    enrich_match_best_of_from_schedule,
     get_match,
     init_db,
     insert_odds,
@@ -18,7 +19,7 @@ from .db import (
 )
 from .heuristics import find_value_signals
 from .importers import load_historical_matches, load_odds_snapshots_csv, load_oracles_elixir_matches
-from .leaguepedia import LeaguepediaQuery, fetch_scoreboard_games
+from .leaguepedia import LeaguepediaQuery, fetch_match_schedule, fetch_scoreboard_games
 from .models import Match, OddsSnapshot
 from .odds_providers import MockOddsProvider, OddsApiIoProvider
 
@@ -100,6 +101,15 @@ def build_parser() -> argparse.ArgumentParser:
     leaguepedia.add_argument("--league", help="Overview page filter, for example LCK or LEC")
     leaguepedia.add_argument("--limit", type=int, default=500)
 
+    enrich_schedule = subparsers.add_parser(
+        "enrich-match-format",
+        help="Fill best-of values for upcoming matches from Leaguepedia MatchSchedule",
+    )
+    enrich_schedule.add_argument("--start-date", required=True)
+    enrich_schedule.add_argument("--end-date", required=True)
+    enrich_schedule.add_argument("--league", help="Overview page filter, for example LCK or LEC")
+    enrich_schedule.add_argument("--limit", type=int, default=500)
+
     collect = subparsers.add_parser("collect-odds", help="Collect latest odds from a provider")
     collect.add_argument("--provider", default="mock", choices=PROVIDER_CHOICES)
     collect.add_argument("--league", help="Provider league slug, for example league-of-legends-lck")
@@ -165,8 +175,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         for row in rows:
             best_of = f"bo{row['best_of']}" if row["best_of"] else "bo?"
+            start_time = _format_match_time(row["start_time"])
             base = (
-                f"{row['start_time']} | {row['league']} | {best_of} | "
+                f"{start_time} | {row['league']} | {best_of} | "
                 f"{row['team_a']} vs {row['team_b']} | {row['match_id']}"
             )
             if row["bookmaker"]:
@@ -246,16 +257,35 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "fetch-leaguepedia-games":
-        matches = fetch_scoreboard_games(
-            LeaguepediaQuery(
-                start_date=args.start_date,
-                end_date=args.end_date,
-                league=args.league,
-                limit=args.limit,
+        try:
+            matches = fetch_scoreboard_games(
+                LeaguepediaQuery(
+                    start_date=args.start_date,
+                    end_date=args.end_date,
+                    league=args.league,
+                    limit=args.limit,
+                )
             )
-        )
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
         match_count = upsert_matches(conn, matches)
         print(f"fetched and imported {match_count} Leaguepedia games")
+        return 0
+
+    if args.command == "enrich-match-format":
+        try:
+            schedule = fetch_match_schedule(
+                LeaguepediaQuery(
+                    start_date=args.start_date,
+                    end_date=args.end_date,
+                    league=args.league,
+                    limit=args.limit,
+                )
+            )
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        updated = enrich_match_best_of_from_schedule(conn, schedule)
+        print(f"updated best-of for {updated} existing matches from {len(schedule)} schedule rows")
         return 0
 
     if args.command == "collect-odds":
@@ -375,6 +405,16 @@ def _split_cli_csv(value: str | None) -> list[str] | None:
 
 def _now_utc_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _format_match_time(value: str) -> str:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    utc_time = parsed.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    local_time = parsed.astimezone().strftime("%H:%M local")
+    return f"{utc_time} ({local_time})"
 
 
 if __name__ == "__main__":

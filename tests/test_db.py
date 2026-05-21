@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from lol_bet_strategy.db import init_db, insert_odds, upcoming_matches_with_latest_odds, upsert_matches
+from lol_bet_strategy.db import (
+    enrich_match_best_of_from_schedule,
+    init_db,
+    insert_odds,
+    upcoming_matches_with_latest_odds,
+    upsert_matches,
+)
 from lol_bet_strategy.models import Match, OddsSnapshot
 
 
@@ -52,3 +58,40 @@ def test_upcoming_matches_with_latest_odds_returns_latest_bookmaker_prices(sqlit
     assert rows[0]["bookmaker"] == "Bet365"
     assert rows[0]["odds_a"] == 1.85
     assert rows[0]["odds_b"] == 1.95
+
+
+def test_enrich_match_best_of_from_schedule_matches_by_time_league_and_teams(sqlite_conn) -> None:
+    init_db(sqlite_conn)
+    upsert_matches(
+        sqlite_conn,
+        [
+            Match(
+                "odds-api-io:1",
+                "League of Legends - LCK",
+                "2026-05-22T10:00:00Z",
+                "kt Rolster",
+                "Gen.g Esports",
+                None,
+                None,
+            ),
+        ],
+    )
+
+    updated = enrich_match_best_of_from_schedule(
+        sqlite_conn,
+        [
+            Match(
+                "leaguepedia-schedule:lck-1",
+                "LCK 2026 Rounds 1-2",
+                "2026-05-22T10:00:00Z",
+                "KT Rolster",
+                "Gen.G",
+                None,
+                3,
+            )
+        ],
+    )
+
+    row = sqlite_conn.execute("select best_of from matches where match_id = ?", ("odds-api-io:1",)).fetchone()
+    assert updated == 1
+    assert row["best_of"] == 3

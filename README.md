@@ -95,6 +95,14 @@ Show upcoming matches with latest odds:
 lol-bets upcoming-matches --league LCK --with-odds-only
 ```
 
+The output includes UTC start time, local start time, match format when known, and latest odds.
+
+Fill best-of values from Leaguepedia when the odds provider does not include them:
+
+```powershell
+lol-bets enrich-match-format --start-date 2026-05-21 --end-date 2026-05-25 --league LCK
+```
+
 Run heuristics:
 
 ```powershell

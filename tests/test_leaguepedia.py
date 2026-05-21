@@ -5,7 +5,7 @@ import json
 import pytest
 
 from lol_bet_strategy import leaguepedia
-from lol_bet_strategy.leaguepedia import LeaguepediaQuery, fetch_scoreboard_games
+from lol_bet_strategy.leaguepedia import LeaguepediaQuery, fetch_match_schedule, fetch_scoreboard_games
 
 
 class FakeResponse:
@@ -56,3 +56,29 @@ def test_fetch_scoreboard_games_raises_api_errors(monkeypatch: pytest.MonkeyPatc
 
     with pytest.raises(RuntimeError, match="rate limit"):
         fetch_scoreboard_games(LeaguepediaQuery(start_date="2024-01-01", end_date="2024-02-01"))
+
+
+def test_fetch_match_schedule_maps_best_of(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "cargoquery": [
+            {
+                "title": {
+                    "MatchId": "LCK_2026_1",
+                    "OverviewPage": "LCK 2026 Rounds 1-2",
+                    "Team1": "KT Rolster",
+                    "Team2": "Gen.G",
+                    "DateTime UTC": "2026-05-22 10:00:00",
+                    "BestOf": "3",
+                }
+            }
+        ]
+    }
+
+    monkeypatch.setattr(leaguepedia, "urlopen", lambda *_args, **_kwargs: FakeResponse(payload))
+
+    matches = fetch_match_schedule(LeaguepediaQuery(start_date="2026-05-22", end_date="2026-05-23"))
+
+    assert len(matches) == 1
+    assert matches[0].match_id == "leaguepedia-schedule:LCK_2026_1"
+    assert matches[0].start_time == "2026-05-22T10:00:00Z"
+    assert matches[0].best_of == 3

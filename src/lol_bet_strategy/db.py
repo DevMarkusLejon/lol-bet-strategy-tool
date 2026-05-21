@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from collections.abc import Iterable
 from pathlib import Path
@@ -204,6 +205,37 @@ def upcoming_matches_with_latest_odds(
     ).fetchall()
 
 
+def enrich_match_best_of_from_schedule(conn: sqlite3.Connection, schedule: Iterable[Match]) -> int:
+    existing = conn.execute(
+        """
+        select match_id, league, start_time, team_a, team_b, best_of
+        from matches
+        where winner is null
+        """
+    ).fetchall()
+    updated = 0
+
+    for scheduled in schedule:
+        if scheduled.best_of is None:
+            continue
+        match_id = _find_schedule_match(existing, scheduled)
+        if match_id is None:
+            continue
+        cursor = conn.execute(
+            """
+            update matches
+            set best_of = ?
+            where match_id = ?
+                and (best_of is null or best_of != ?)
+            """,
+            (scheduled.best_of, match_id, scheduled.best_of),
+        )
+        updated += cursor.rowcount
+
+    conn.commit()
+    return updated
+
+
 def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal]) -> int:
     rows = list(signals)
     conn.executemany(
@@ -252,3 +284,61 @@ def database_summary(conn: sqlite3.Connection) -> dict[str, object]:
         "max_date": date_range["max_date"],
         "leagues": [(row["league"], row["count"]) for row in leagues],
     }
+
+
+def _find_schedule_match(rows: list[sqlite3.Row], scheduled: Match) -> str | None:
+    candidates = [
+        row
+        for row in rows
+        if row["start_time"] == scheduled.start_time
+        and _league_matches(row["league"], scheduled.league)
+        and _teams_match(row["team_a"], row["team_b"], scheduled.team_a, scheduled.team_b)
+    ]
+    if len(candidates) != 1:
+        return None
+    return candidates[0]["match_id"]
+
+
+def _league_matches(existing: str, scheduled: str) -> bool:
+    existing_norm = _normalize_text(existing)
+    scheduled_norm = _normalize_text(scheduled)
+    if not existing_norm or not scheduled_norm:
+        return False
+    if existing_norm in scheduled_norm or scheduled_norm in existing_norm:
+        return True
+    return bool(set(existing_norm.split()).intersection(scheduled_norm.split()))
+
+
+def _teams_match(existing_a: str, existing_b: str, scheduled_a: str, scheduled_b: str) -> bool:
+    return (
+        _team_name_matches(existing_a, scheduled_a)
+        and _team_name_matches(existing_b, scheduled_b)
+    ) or (
+        _team_name_matches(existing_a, scheduled_b)
+        and _team_name_matches(existing_b, scheduled_a)
+    )
+
+
+def _team_name_matches(left: str, right: str) -> bool:
+    left_norm = _normalize_team(left)
+    right_norm = _normalize_team(right)
+    if left_norm == right_norm:
+        return True
+    if left_norm and right_norm and (left_norm in right_norm or right_norm in left_norm):
+        return True
+    left_tokens = set(left_norm.split())
+    right_tokens = set(right_norm.split())
+    return bool(left_tokens and right_tokens and left_tokens.intersection(right_tokens))
+
+
+def _normalize_team(value: str) -> str:
+    words = [
+        word
+        for word in _normalize_text(value).split()
+        if word not in {"esports", "esport", "gaming", "team", "kia", "dn"}
+    ]
+    return " ".join(words)
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", value.lower())).strip()
