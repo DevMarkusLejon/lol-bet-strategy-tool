@@ -184,6 +184,7 @@ def upcoming_matches_with_latest_odds(
             m.start_time,
             m.team_a,
             m.team_b,
+            m.winner,
             m.best_of,
             o.provider,
             o.bookmaker,
@@ -229,6 +230,26 @@ def enrich_match_best_of_from_schedule(conn: sqlite3.Connection, schedule: Itera
                 and (best_of is null or best_of != ?)
             """,
             (scheduled.best_of, match_id, scheduled.best_of),
+        )
+        updated += cursor.rowcount
+
+    conn.commit()
+    return updated
+
+
+def update_match_results(conn: sqlite3.Connection, settled_matches: Iterable[Match]) -> int:
+    updated = 0
+    for match in settled_matches:
+        if match.winner is None:
+            continue
+        cursor = conn.execute(
+            """
+            update matches
+            set winner = ?
+            where match_id = ?
+                and winner is null
+            """,
+            (match.winner, match.match_id),
         )
         updated += cursor.rowcount
 

@@ -51,6 +51,28 @@ class OddsApiIoProvider(OddsProvider):
 
         return matches, snapshots
 
+    def fetch_settled_matches(self) -> list[Match]:
+        matches: list[Match] = []
+        for event in self._get_events():
+            if event.get("status") != "settled":
+                continue
+            match = _event_to_match(event)
+            match_winner = _winner_from_event(event)
+            if match_winner is None:
+                continue
+            matches.append(
+                Match(
+                    match_id=match.match_id,
+                    league=match.league,
+                    start_time=match.start_time,
+                    team_a=match.team_a,
+                    team_b=match.team_b,
+                    winner=match_winner,
+                    best_of=match.best_of,
+                )
+            )
+        return matches
+
     def fetch_leagues(self) -> list[dict]:
         payload = self._get_json(
             "/leagues",
@@ -131,6 +153,21 @@ def _event_to_match(event: dict) -> Match:
         winner=None,
         best_of=None,
     )
+
+
+def _winner_from_event(event: dict) -> str | None:
+    scores = event.get("scores") or {}
+    try:
+        home_score = int(scores["home"])
+        away_score = int(scores["away"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    if home_score > away_score:
+        return event.get("home")
+    if away_score > home_score:
+        return event.get("away")
+    return None
 
 
 def _odds_response_to_snapshots(match: Match, payload: object) -> list[OddsSnapshot]:

@@ -15,6 +15,7 @@ from .db import (
     insert_signals,
     latest_odds_snapshots,
     upcoming_matches_with_latest_odds,
+    update_match_results,
     upsert_matches,
 )
 from .heuristics import find_value_signals
@@ -128,6 +129,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Stop after this many captures. Omit to run until interrupted.",
     )
 
+    settle = subparsers.add_parser("settle-results", help="Update winners for settled provider matches")
+    settle.add_argument("--provider", default="odds-api-io", choices=["odds-api-io"])
+    settle.add_argument("--league", help="Provider league slug, for example league-of-legends-lck")
+    settle.add_argument("--event-limit", type=_positive_int_arg, default=25)
+
     run = subparsers.add_parser("run-heuristics", help="Run strategy heuristics over stored odds")
     run.add_argument("--min-edge", type=float, default=0.05)
 
@@ -181,6 +187,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"{start_time} | {league} | {best_of} | "
                 f"{row['team_a']} vs {row['team_b']} | {row['match_id']}"
             )
+            if row["winner"]:
+                base = f"{base} | winner={row['winner']}"
             if row["bookmaker"]:
                 print(
                     f"{base} | {row['bookmaker']} "
@@ -314,6 +322,20 @@ def main(argv: list[str] | None = None) -> int:
             if args.max_runs is not None and run_count >= args.max_runs:
                 break
             time.sleep(args.interval_seconds)
+        return 0
+
+    if args.command == "settle-results":
+        try:
+            provider = _provider_from_name(
+                args.provider,
+                league=getattr(args, "league", None),
+                event_limit=getattr(args, "event_limit", 25),
+            )
+            settled = provider.fetch_settled_matches()
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
+        updated = update_match_results(conn, settled)
+        print(f"updated winners for {updated} matches from {len(settled)} settled provider events")
         return 0
 
     if args.command == "run-heuristics":

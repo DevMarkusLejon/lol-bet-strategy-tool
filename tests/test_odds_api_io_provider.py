@@ -110,6 +110,38 @@ def test_odds_api_io_provider_fetches_each_bookmaker_separately(monkeypatch) -> 
     assert any("bookmakers=Unibet" in url for url in requested_urls)
 
 
+def test_odds_api_io_provider_fetches_settled_winners(monkeypatch) -> None:
+    payload = [
+        {
+            "id": 123,
+            "league": {"name": "League of Legends Champions Korea", "slug": "lck"},
+            "home": "T1",
+            "away": "Gen.G",
+            "date": "2026-06-01T17:00:00Z",
+            "status": "settled",
+            "scores": {"home": 2, "away": 1},
+        },
+        {
+            "id": 124,
+            "league": {"name": "League of Legends Champions Korea", "slug": "lck"},
+            "home": "DK",
+            "away": "Brion",
+            "date": "2026-06-01T19:00:00Z",
+            "status": "pending",
+            "scores": {"home": 0, "away": 0},
+        },
+    ]
+
+    monkeypatch.setattr(odds_api_io, "urlopen", lambda *_args, **_kwargs: FakeResponse(payload))
+
+    provider = OddsApiIoProvider(api_key="test-key", league="lck")
+    settled = provider.fetch_settled_matches()
+
+    assert len(settled) == 1
+    assert settled[0].match_id == "odds-api-io:123"
+    assert settled[0].winner == "T1"
+
+
 def test_odds_api_io_provider_requires_api_key(monkeypatch) -> None:
     monkeypatch.delenv("ODDS_API_IO_KEY", raising=False)
 

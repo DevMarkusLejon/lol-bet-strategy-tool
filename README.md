@@ -103,6 +103,12 @@ Fill best-of values from Leaguepedia when the odds provider does not include the
 lol-bets enrich-match-format --start-date 2026-05-21 --end-date 2026-05-25 --league LCK
 ```
 
+Update winners for completed Odds-API.io matches:
+
+```powershell
+lol-bets settle-results --provider odds-api-io --league league-of-legends-lck --event-limit 25
+```
+
 Run heuristics:
 
 ```powershell
