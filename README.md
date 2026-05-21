@@ -89,6 +89,12 @@ Inspect latest captured odds:
 lol-bets latest-odds
 ```
 
+Show upcoming matches with latest odds:
+
+```powershell
+lol-bets upcoming-matches --league LCK --with-odds-only
+```
+
 Run heuristics:
 
 ```powershell

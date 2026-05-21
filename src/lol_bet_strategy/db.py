@@ -157,6 +157,53 @@ def latest_odds_snapshots(conn: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def upcoming_matches_with_latest_odds(
+    conn: sqlite3.Connection,
+    now_utc: str,
+    limit: int = 25,
+    league: str | None = None,
+    with_odds_only: bool = False,
+) -> list[sqlite3.Row]:
+    filters = ["m.start_time > ?"]
+    params: list[object] = [now_utc]
+
+    if league:
+        filters.append("lower(m.league) like ?")
+        params.append(f"%{league.lower()}%")
+
+    if with_odds_only:
+        filters.append("o.id is not null")
+
+    params.append(limit)
+    return conn.execute(
+        f"""
+        select
+            m.match_id,
+            m.league,
+            m.start_time,
+            m.team_a,
+            m.team_b,
+            m.best_of,
+            o.provider,
+            o.bookmaker,
+            o.captured_at,
+            o.odds_a,
+            o.odds_b
+        from matches m
+        left join odds_snapshots o on o.match_id = m.match_id
+            and o.id in (
+                select max(id)
+                from odds_snapshots
+                group by match_id, provider, bookmaker
+            )
+        where {" and ".join(filters)}
+        order by m.start_time asc, m.league asc, m.team_a asc, o.bookmaker asc
+        limit ?
+        """,
+        params,
+    ).fetchall()
+
+
 def insert_signals(conn: sqlite3.Connection, signals: Iterable[HeuristicSignal]) -> int:
     rows = list(signals)
     conn.executemany(

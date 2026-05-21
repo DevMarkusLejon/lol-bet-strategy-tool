@@ -13,6 +13,7 @@ from .db import (
     insert_odds,
     insert_signals,
     latest_odds_snapshots,
+    upcoming_matches_with_latest_odds,
     upsert_matches,
 )
 from .heuristics import find_value_signals
@@ -32,6 +33,15 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("init-db", help="Create or migrate the SQLite database")
     subparsers.add_parser("db-summary", help="Print a short summary of imported data")
     subparsers.add_parser("latest-odds", help="Print latest odds per match and bookmaker")
+
+    upcoming = subparsers.add_parser("upcoming-matches", help="Print upcoming matches and latest odds")
+    upcoming.add_argument("--league", help="Filter by league text, for example LCK or LEC")
+    upcoming.add_argument("--limit", type=_positive_int_arg, default=25)
+    upcoming.add_argument("--with-odds-only", action="store_true")
+    upcoming.add_argument(
+        "--now",
+        help="Override current UTC time for testing, for example 2026-05-21T00:00:00Z",
+    )
 
     provider_leagues = subparsers.add_parser(
         "provider-leagues",
@@ -142,6 +152,32 @@ def main(argv: list[str] | None = None) -> int:
                 f"{row['team_b']}={row['odds_b']:.2f} captured={row['captured_at']}"
             )
         print(f"latest odds rows: {len(rows)}")
+        return 0
+
+    if args.command == "upcoming-matches":
+        now_utc = args.now or _now_utc_iso()
+        rows = upcoming_matches_with_latest_odds(
+            conn,
+            now_utc=now_utc,
+            limit=args.limit,
+            league=args.league,
+            with_odds_only=args.with_odds_only,
+        )
+        for row in rows:
+            best_of = f"bo{row['best_of']}" if row["best_of"] else "bo?"
+            base = (
+                f"{row['start_time']} | {row['league']} | {best_of} | "
+                f"{row['team_a']} vs {row['team_b']} | {row['match_id']}"
+            )
+            if row["bookmaker"]:
+                print(
+                    f"{base} | {row['bookmaker']} "
+                    f"{row['team_a']}={row['odds_a']:.2f} {row['team_b']}={row['odds_b']:.2f} "
+                    f"captured={row['captured_at']}"
+                )
+            else:
+                print(f"{base} | no odds yet")
+        print(f"upcoming rows: {len(rows)}")
         return 0
 
     if args.command == "provider-leagues":
@@ -335,6 +371,10 @@ def _split_cli_csv(value: str | None) -> list[str] | None:
     if value is None:
         return None
     return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _now_utc_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 if __name__ == "__main__":
